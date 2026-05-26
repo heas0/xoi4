@@ -37,6 +37,7 @@ export class Viewport {
   private lastPinchCenterX = 0;
   private lastPinchCenterY = 0;
   private wasPinchingInGesture = false;
+  public hasUserInteracted = false;
 
   constructor(config: ViewportConfig) {
     this.canvas = config.canvas;
@@ -72,6 +73,7 @@ export class Viewport {
   }
 
   private onMouseDown(e: MouseEvent): void {
+    this.hasUserInteracted = true;
     if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
       this.isDragging = true;
       this.lastMouseX = e.clientX;
@@ -100,6 +102,7 @@ export class Viewport {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
+    this.hasUserInteracted = true;
     
     const rect = this.canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -187,6 +190,7 @@ export class Viewport {
 
   private onTouchStart(e: TouchEvent): void {
     e.preventDefault();
+    this.hasUserInteracted = true;
 
     if (e.touches.length === 1) {
       // Single finger — start drag

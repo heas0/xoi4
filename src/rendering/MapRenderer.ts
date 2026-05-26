@@ -33,7 +33,6 @@ export class MapRenderer {
   private hoveredRegion: Region | null = null;
   private hoveredCell: HexCell | null = null;
   private animationFrameId: number | null = null;
-  private userInteracted = false;
   
   public showChunkGrid = false;
   public showRegionGrid = true;
@@ -144,7 +143,7 @@ export class MapRenderer {
   }
 
   recenter(): void {
-    this.userInteracted = false;
+    this.viewport.hasUserInteracted = false;
     this.fitViewportToMap(true);
     this.needsRedraw = true;
   }
@@ -272,20 +271,41 @@ export class MapRenderer {
     }
   }
 
-  private fitViewportToMap(force = false): void {
+  private focusOnEuropeInitial(): void {
     if (!this.mapImage) return;
-    if (this.userInteracted && !force) return;
 
-    // Use CSS pixel dimensions, not DPR-scaled canvas dimensions
     const rect = this.canvas.getBoundingClientRect();
     const width = rect.width;
     const height = rect.height;
     if (width === 0 || height === 0) return;
 
-    const zoom = Math.min(width / this.mapImage.width, height / this.mapImage.height) * 0.9;
-    const offsetX = (width - this.mapImage.width * zoom) / 2;
-    const offsetY = (height - this.mapImage.height * zoom) / 2;
+    // Define Bounding Box for Europe & Africa view as in screenshot
+    // Longitude: ~25° W to ~55° E -> X: ~4650 to ~7050
+    // Latitude: ~72° N to ~35° S -> Y: ~540 to ~3750
+    const minX = 4650;
+    const maxX = 7050;
+    const minY = 540;
+    const maxY = 3750;
+
+    const boxWidth = maxX - minX;
+    const boxHeight = maxY - minY;
+
+    const centerX = (minX + maxX) / 2; // 5850 (Perfect center for Europe/Africa)
+    const centerY = (minY + maxY) / 2; // 2145
+
+    // Fit this box into the viewport with some padding (e.g. 95%)
+    const zoom = Math.min(width / boxWidth, height / boxHeight) * 0.95;
+
+    // Calculate offsets to center on (centerX, centerY)
+    const offsetX = width / 2 - centerX * zoom;
+    const offsetY = height / 2 - centerY * zoom;
+
     this.viewport.setView(offsetX, offsetY, zoom);
+  }
+
+  private fitViewportToMap(force = false): void {
+    if (this.viewport.hasUserInteracted && !force) return;
+    this.focusOnEuropeInitial();
   }
 
   private renderRegions(): void {
@@ -553,17 +573,69 @@ export class MapRenderer {
     const ctx = this.ctx;
     const zoom = this.viewport.zoom;
     const groups = this.groupService.getSelectableGroups();
-    
+    const isMobile = window.innerWidth <= 768;
+
+    // Prepare group data with calculated priorities and properties
+    const groupDataList = [];
     for (const group of groups) {
       const groupRegions = this.regionService.getRegionsByGroup(group.id);
       if (groupRegions.length === 0) continue;
       
-      // Calculate total cell count for size-based filtering
+      // Calculate total cell count
       let totalCellCount = 0;
       for (const region of groupRegions) {
         totalCellCount += region.cells.length;
       }
       
+      let hasCapital = false;
+      let labelX = 0;
+      let labelZ = 0;
+      
+      if ((group as any).capitalRegionId) {
+        const capRegion = this.regionService.getRegion((group as any).capitalRegionId);
+        if (capRegion && capRegion.groupId === group.id) {
+          labelX = capRegion.center.x;
+          labelZ = capRegion.center.z;
+          hasCapital = true;
+        }
+      }
+      
+      if (!hasCapital) {
+        const mainCluster = this.getCountryMainCluster(groupRegions);
+        if (mainCluster.length === 0) continue;
+        
+        let sumX = 0;
+        let sumZ = 0;
+        for (const cell of mainCluster) {
+          sumX += cell.worldX;
+          sumZ += cell.worldZ;
+        }
+        labelX = sumX / mainCluster.length;
+        labelZ = sumZ / mainCluster.length;
+      }
+      
+      groupDataList.push({
+        group,
+        totalCellCount,
+        hasCapital,
+        labelX,
+        labelZ
+      });
+    }
+
+    // Sort: countries with capitals first, then larger countries first
+    groupDataList.sort((a, b) => {
+      if (a.hasCapital !== b.hasCapital) {
+        return a.hasCapital ? -1 : 1;
+      }
+      return b.totalCellCount - a.totalCellCount;
+    });
+
+    const drawnLabelBoxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [];
+
+    for (const data of groupDataList) {
+      const { group, totalCellCount, hasCapital, labelX, labelZ } = data;
+
       // Google Maps style dynamic fade-in thresholds based on size and zoom
       let minZoom = 0.15;
       let fullZoom = 0.35;
@@ -588,51 +660,63 @@ export class MapRenderer {
       
       if (opacity <= 0.01) continue;
       
-      // Determine label center: check if capital is set, otherwise use centroid of largest contiguous cluster
-      let labelX = 0;
-      let labelZ = 0;
-      let hasCapital = false;
-      
-      if ((group as any).capitalRegionId) {
-        const capRegion = this.regionService.getRegion((group as any).capitalRegionId);
-        // Ensure capital region still belongs to this country
-        if (capRegion && capRegion.groupId === group.id) {
-          labelX = capRegion.center.x;
-          labelZ = capRegion.center.z;
-          hasCapital = true;
-        }
-      }
-      
-      if (!hasCapital) {
-        // Fallback to the centroid of the largest contiguous cluster of land cells (resolves Alaska pulling USA into Canada!)
-        const mainCluster = this.getCountryMainCluster(groupRegions);
-        if (mainCluster.length === 0) continue;
-        
-        let sumX = 0;
-        let sumZ = 0;
-        for (const cell of mainCluster) {
-          sumX += cell.worldX;
-          sumZ += cell.worldZ;
-        }
-        labelX = sumX / mainCluster.length;
-        labelZ = sumZ / mainCluster.length;
-      }
-      
       // Convert world coordinates to canvas screen coordinates
       const screenPos = this.viewport.worldToScreen(labelX, labelZ);
       
       // Base font size calculated logarithmically based on country size (cell count)
-      const baseFontSize = Math.max(10, Math.min(22, Math.round(9 + 1.2 * Math.log2(totalCellCount))));
+      const baseFontSize = Math.max(isMobile ? 8 : 10, Math.min(isMobile ? 18 : 22, Math.round((isMobile ? 7.5 : 9) + 1.2 * Math.log2(totalCellCount))));
       
       // Organic scaling: scale the font size slightly based on the current zoom level (like Google Maps)
       const zoomScale = Math.pow(zoom, 0.25);
-      const fontSize = Math.max(8, Math.min(26, Math.round(baseFontSize * zoomScale)));
+      const fontSize = Math.max(isMobile ? 7 : 8, Math.min(isMobile ? 22 : 26, Math.round(baseFontSize * zoomScale)));
       
       ctx.save();
+      
+      // Apply clean spacious letter-spacing like Google Maps
+      if ('letterSpacing' in ctx) {
+        (ctx as any).letterSpacing = isMobile ? '1.2px' : '1.8px';
+      }
+      
+      // Use Roboto font with medium/semi-bold weight (500)
+      ctx.font = `500 ${fontSize}px 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif`;
+      
+      const name = group.name.toUpperCase();
+      const textWidth = ctx.measureText(name).width;
+      const textHeight = fontSize;
+      const textY = hasCapital ? screenPos.y + fontSize + 4 : screenPos.y;
+
+      // Calculate Bounding Box of this label on screen
+      const paddingX = isMobile ? 6 : 10;
+      const paddingY = isMobile ? 4 : 8;
+      const box = {
+        minX: screenPos.x - textWidth / 2 - paddingX,
+        maxX: screenPos.x + textWidth / 2 + paddingX,
+        minY: (hasCapital ? screenPos.y - 12 : textY - textHeight / 2) - paddingY,
+        maxY: textY + textHeight / 2 + paddingY
+      };
+
+      // Check collision with already drawn labels
+      let collides = false;
+      for (const drawnBox of drawnLabelBoxes) {
+        if (!(box.maxX < drawnBox.minX || 
+              box.minX > drawnBox.maxX || 
+              box.maxY < drawnBox.minY || 
+              box.minY > drawnBox.maxY)) {
+          collides = true;
+          break;
+        }
+      }
+
+      if (collides) {
+        ctx.restore();
+        continue;
+      }
+
+      // No collision! Draw the label
+      drawnLabelBoxes.push(box);
+
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
-      // Apply visibility opacity to the context
       ctx.globalAlpha = opacity;
       
       // If capital is set, draw a beautiful gold star (★) with a white halo slightly above the name
@@ -646,26 +730,18 @@ export class MapRenderer {
         ctx.fillText('★', screenPos.x, screenPos.y - 8);
       }
       
-      // Apply clean spacious letter-spacing like Google Maps (Chrome/Firefox/Safari compatible)
-      if ('letterSpacing' in ctx) {
-        (ctx as any).letterSpacing = '1.8px';
-      }
-      
-      // Use Roboto font with medium/semi-bold weight (500)
+      // Draw label
       ctx.font = `500 ${fontSize}px 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif`;
-      
-      // Adjust label Y coordinate slightly down if it has a capital star above it
-      const textY = hasCapital ? screenPos.y + fontSize + 4 : screenPos.y;
       
       // 1. Draw elegant white halo outline for premium legibility over any background
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
       ctx.lineWidth = Math.max(3.2, fontSize / 3.5);
       ctx.lineJoin = 'round';
-      ctx.strokeText(group.name.toUpperCase(), screenPos.x, textY);
+      ctx.strokeText(name, screenPos.x, textY);
       
       // 2. Draw sharp premium slate-colored text fill
       ctx.fillStyle = '#1e293b';
-      ctx.fillText(group.name.toUpperCase(), screenPos.x, textY);
+      ctx.fillText(name, screenPos.x, textY);
       
       ctx.restore();
     }
