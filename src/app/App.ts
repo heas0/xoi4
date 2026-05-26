@@ -132,6 +132,9 @@ export class App {
       },
       onSetCapital: (regionId: string, groupId: string) => {
         this.setCapital(groupId, regionId);
+      },
+      onUpdateNote: (regionId: string, note: string) => {
+        this.updateRegionNote(regionId, note);
       }
     });
 
@@ -213,6 +216,7 @@ export class App {
 
       console.log('Generating regions...');
       this.regionService.generateRegions();
+      this.loadRegionNotes();
 
       await this.initializeWorldSync();
 
@@ -256,6 +260,42 @@ export class App {
     this.regionService.applyCountryAssignments(assignmentsMap);
 
     this.renderer.needsRedraw = true;
+  }
+
+  private loadRegionNotes(): void {
+    const storageKey = `hex_notes_${this.worldSync.worldId}`;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const notesObj = JSON.parse(stored);
+        for (const [regionId, note] of Object.entries(notesObj)) {
+          const region = this.regionService.getRegion(regionId);
+          if (region) {
+            region.note = note as string;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load region notes from localStorage:', e);
+    }
+  }
+
+  private updateRegionNote(regionId: string, note: string): void {
+    const region = this.regionService.getRegion(regionId);
+    if (region) {
+      region.note = note;
+
+      // Persist in localStorage
+      const storageKey = `hex_notes_${this.worldSync.worldId}`;
+      try {
+        const stored = localStorage.getItem(storageKey);
+        const notesObj = stored ? JSON.parse(stored) : {};
+        notesObj[regionId] = note;
+        localStorage.setItem(storageKey, JSON.stringify(notesObj));
+      } catch (e) {
+        console.error('Failed to save region note to localStorage:', e);
+      }
+    }
   }
 
 
@@ -520,7 +560,8 @@ export class App {
         this.contextMenu.show(e.clientX, e.clientY, {
           id: region.id,
           groupId: region.groupId,
-          groupName
+          groupName,
+          note: region.note || ''
         });
       }
     }

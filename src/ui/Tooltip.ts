@@ -36,6 +36,15 @@ export class Tooltip {
       Гекс: (${cell.q}, ${cell.r})<br>
       Государство: <span style="color: ${groupColor}">${groupName}</span>
     `;
+
+    if (region && region.note) {
+      this.element.innerHTML += `
+        <div style="border-top: 1px solid rgba(255, 255, 255, 0.12); margin-top: 6px; padding-top: 6px; font-size: 11px; color: #e2e8f0; max-width: 220px; word-wrap: break-word;">
+          <span style="opacity: 0.7;">📝</span> ${region.note}
+        </div>
+      `;
+    }
+
     this.element.style.display = 'block';
   }
 

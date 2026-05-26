@@ -13,6 +13,7 @@ export class Region extends EventEmitter implements IGroupable, IBoundary {
   public militaryFactories: number = 0;
   public manpower: number = 0;
   public lore: string = '';
+  public note: string = '';
   public resources = {
     steel: 0,
     oil: 0,
