@@ -25,9 +25,10 @@ export class LobbyPanel {
       <div class="lobby-panel-title">МУЛЬТИПЛЕЕР</div>
 
       <div class="lobby-profile-section">
-        <div class="lobby-profile-header locked" title="Ник нельзя менять в мультиплеере">
+        <div class="lobby-profile-header" title="Нажмите, чтобы изменить ник">
           <span class="lobby-color-dot" id="lobby-profile-color" style="background-color: ${currentColor}; box-shadow: 0 0 8px ${currentColor}"></span>
-          <span id="lobby-profile-name">${currentName}</span>
+          <input type="text" id="lobby-profile-name" value="${currentName}" maxLength="20" placeholder="Ваш ник..." />
+          <span class="lobby-profile-edit-icon">✏️</span>
         </div>
       </div>
 
@@ -46,7 +47,31 @@ export class LobbyPanel {
     `;
 
     document.body.appendChild(this.container);
+    this.setupEventListeners();
     this.updatePlayers([]);
+  }
+
+  private setupEventListeners(): void {
+    const nameInput = this.container.querySelector('#lobby-profile-name') as HTMLInputElement;
+    if (nameInput) {
+      const handleNameChange = () => {
+        const newName = nameInput.value.trim();
+        if (newName && newName !== this.worldSync.getOrCreateUserName()) {
+          this.worldSync.updateUsername(newName);
+          this.updatePlayers(this.activePlayers);
+        } else {
+          nameInput.value = this.worldSync.getOrCreateUserName();
+        }
+      };
+
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          nameInput.blur();
+        }
+      });
+
+      nameInput.addEventListener('blur', handleNameChange);
+    }
   }
 
   get players(): LobbyPlayer[] {

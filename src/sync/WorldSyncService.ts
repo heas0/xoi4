@@ -422,12 +422,18 @@ export class WorldSyncService {
     // Mouse tracking disabled
   }
 
-  updateUsername(_newName: string): void {
+  updateUsername(newName: string): void {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+
+    try {
+      window.localStorage.setItem('hexagonal_cells_username', trimmed);
+    } catch {}
+
     if (this.client && this.channel) {
-      const name = this.getOrCreateUserName();
       const color = this.getOrCreateUserColor();
       void this.channel.track({
-        name,
+        name: trimmed,
         color
       });
     }

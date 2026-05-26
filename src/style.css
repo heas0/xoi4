@@ -460,8 +460,11 @@ body {
   transition: all 0.22s ease;
 }
 
-.lobby-profile-header.locked {
-  cursor: default;
+.lobby-profile-header:hover,
+.lobby-profile-header:focus-within {
+  border-color: var(--color-primary);
+  background: rgba(15, 23, 42, 0.6);
+  box-shadow: 0 0 10px var(--color-primary-glow);
 }
 
 .lobby-color-dot {
@@ -475,15 +478,26 @@ body {
 
 #lobby-profile-name {
   flex: 1;
+  background: transparent;
+  border: none;
   color: var(--text-main);
   font-size: 13px;
   font-family: inherit;
   font-weight: 600;
-  min-width: 0;
-  max-width: 170px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  outline: none;
+  padding: 0;
+  width: 100%;
+}
+
+.lobby-profile-edit-icon {
+  font-size: 11px;
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.lobby-profile-header:hover .lobby-profile-edit-icon {
+  opacity: 0.9;
 }
 
 .lobby-row {
