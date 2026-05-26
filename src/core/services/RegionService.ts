@@ -165,6 +165,23 @@ export class RegionService extends EventEmitter {
     return changedCount;
   }
 
+  applyCountryAssignments(countryAssignments: Map<string, string>): void {
+    this.countryAssignments = countryAssignments;
+    const assignments: RegionGroupAssignment[] = [];
+
+    for (const region of this.regions.values()) {
+      const majorityGroupId = this.getMajorityCountryId(region.cells);
+      if (majorityGroupId !== 'none') {
+        assignments.push({
+          regionId: region.id,
+          groupId: majorityGroupId
+        });
+      }
+    }
+
+    this.setRegionGroups(assignments);
+  }
+
   clearGroupAssignments(groupId: string): number {
     const assignments = this.getRegionsByGroup(groupId).map(region => ({
       regionId: region.id,

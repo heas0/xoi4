@@ -16,10 +16,6 @@ export interface SyncedRegionOwnership extends RegionGroupAssignment {
   clientId: string | null;
 }
 
-export interface WorldBaseline {
-  groups: GroupSeed[];
-  ownership: RegionGroupAssignment[];
-}
 
 export interface WorldSubscriptionHandlers {
   onGroupChange: (group: SyncedGroup) => void;
@@ -81,23 +77,11 @@ export class WorldSyncService {
     return Boolean(this.client);
   }
 
-  async loadWorld(baseline: WorldBaseline): Promise<WorldSnapshot> {
+  async loadWorld(): Promise<WorldSnapshot> {
     this.assertEnabled();
 
     await this.ensureWorld();
-    await this.seedGroups(baseline.groups);
     const groups = await this.fetchGroups();
-    const deletedGroupIds = new Set(
-      groups
-        .filter(group => group.deletedAt)
-        .map(group => group.id)
-    );
-    const ownershipBaseline = baseline.ownership.map(assignment => ({
-      regionId: assignment.regionId,
-      groupId: deletedGroupIds.has(assignment.groupId) ? 'none' : assignment.groupId
-    }));
-    await this.seedOwnership(ownershipBaseline);
-
     const ownership = await this.fetchOwnership();
 
     return { groups, ownership };
@@ -253,50 +237,6 @@ export class WorldSyncService {
     if (error) throw error;
   }
 
-  private async seedGroups(groups: GroupSeed[]): Promise<void> {
-    const rows = groups.map(group => ({
-      world_id: this.worldId,
-      id: group.id,
-      name: group.name,
-      color: group.color,
-      capital_region_id: group.capitalRegionId ?? null,
-      deleted_at: null
-    }));
-
-    await this.insertInBatches('world_groups', rows, 'world_id,id');
-  }
-
-  private async seedOwnership(ownership: RegionGroupAssignment[]): Promise<void> {
-    const rows = ownership.map(assignment => ({
-      world_id: this.worldId,
-      region_id: assignment.regionId,
-      group_id: assignment.groupId,
-      version: 1,
-      client_id: this.clientId
-    }));
-
-    await this.insertInBatches('region_ownership', rows, 'world_id,region_id');
-  }
-
-  private async insertInBatches(
-    table: 'world_groups' | 'region_ownership',
-    rows: Record<string, unknown>[],
-    onConflict: string
-  ): Promise<void> {
-    const batchSize = 500;
-
-    for (let index = 0; index < rows.length; index += batchSize) {
-      const batch = rows.slice(index, index + batchSize);
-      const { error } = await this.client!
-        .from(table)
-        .upsert(batch, {
-          onConflict,
-          ignoreDuplicates: true
-        });
-
-      if (error) throw error;
-    }
-  }
 
   private async fetchGroups(): Promise<SyncedGroup[]> {
     const rows = await this.fetchAll<WorldGroupRow>('world_groups', 'world_id,id,name,color,capital_region_id,deleted_at,updated_at');

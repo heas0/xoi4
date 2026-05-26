@@ -121,10 +121,6 @@ export class LobbyPanel {
     onlineCountElement.className = 'lobby-online-status-pill offline';
   }
 
-  public destroy(): void {
-    this.container.remove();
-  }
-
   private escapeHtml(value: string): string {
     return value
       .replace(/&/g, '&amp;')

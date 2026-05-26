@@ -8,7 +8,7 @@ import { DebugPanel } from '../ui/DebugPanel';
 import { LobbyPanel } from '../ui/LobbyPanel';
 import { LayersPanel } from '../ui/LayersPanel';
 import { WorldSyncService } from '../sync';
-import type { SyncedGroup, SyncedRegionOwnership, WorldBaseline, WorldSnapshot } from '../sync';
+import type { SyncedGroup, SyncedRegionOwnership, WorldSnapshot } from '../sync';
 import countryAssignmentsData from '../data/countryAssignments.generated.json';
 
 export interface AppConfig {
@@ -81,11 +81,7 @@ export class App {
     });
 
     this.groupService = new GroupService();
-    this.groupService.createGroups(COUNTRY_ASSIGNMENTS.countries);
-    this.regionService = new RegionService(
-      this.hexGridService,
-      this.createCountryAssignmentMap(config)
-    );
+    this.regionService = new RegionService(this.hexGridService);
 
     this.terrainService = new TerrainService(
       config.mapImageData.data,
@@ -177,18 +173,18 @@ export class App {
     return element;
   }
 
-  private createCountryAssignmentMap(config: AppConfig): Map<string, string> {
+  private createCountryAssignmentMap(): Map<string, string> {
     const metadata = COUNTRY_ASSIGNMENTS.map;
-    const compatible = metadata.width === config.mapImage.width &&
-      metadata.height === config.mapImage.height &&
-      metadata.hexSize === config.hexSize &&
+    const compatible = metadata.width === this.mapImage.width &&
+      metadata.height === this.mapImage.height &&
+      metadata.hexSize === this.hexGridService.hexSize &&
       metadata.projection === 'equirectangular';
 
     if (!compatible) {
       console.warn(
         'Country assignments metadata does not match the current map. ' +
         `Generated: ${metadata.width}x${metadata.height}, hex=${metadata.hexSize}, ${metadata.projection}. ` +
-        `Current: ${config.mapImage.width}x${config.mapImage.height}, hex=${config.hexSize}.`
+        `Current: ${this.mapImage.width}x${this.mapImage.height}, hex=${this.hexGridService.hexSize}.`
       );
       return new Map();
     }
@@ -230,37 +226,39 @@ export class App {
     if (!this.worldSync.isEnabled) {
       this.isWorldLive = false;
       this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
-      console.warn('Supabase sync is disabled. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable shared world state.');
+      console.warn('Supabase sync is disabled. Using local data as fallback.');
+      this.applyOfflineFallback();
       return;
     }
 
-    this.setSyncStatus('connecting', 'Процесс синхронизации... (сохранение изменений)');
+    this.setSyncStatus('connecting', 'Загрузка мира с сервера...');
 
     try {
-      const snapshot = await this.worldSync.loadWorld(this.createWorldBaseline());
+      const snapshot = await this.worldSync.loadWorld();
       this.applyWorldSnapshot(snapshot);
       this.subscribeToWorldChanges();
     } catch (error) {
-      console.error('Failed to initialize Supabase sync:', error);
+      console.error('Failed to load world from server:', error);
       this.isWorldLive = false;
-      this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
+      this.setSyncStatus('disabled', 'Ошибка загрузки мира с сервера');
+      this.applyOfflineFallback();
     }
   }
 
-  private createWorldBaseline(): WorldBaseline {
-    return {
-      groups: this.groupService.getAllGroups().map(group => ({
-        id: group.id,
-        name: group.name,
-        color: group.color,
-        capitalRegionId: group.capitalRegionId ?? null
-      })),
-      ownership: this.regionService.getAllRegions().map(region => ({
-        regionId: region.id,
-        groupId: region.groupId
-      }))
-    };
+  private applyOfflineFallback(): void {
+    console.log('🔌 Applying offline fallback (local country assignments)...');
+
+    // 1. Create groups from JSON
+    this.groupService.createGroups(COUNTRY_ASSIGNMENTS.countries);
+
+    // 2. Calculate and apply country assignments to regions
+    const assignmentsMap = this.createCountryAssignmentMap();
+    this.regionService.applyCountryAssignments(assignmentsMap);
+
+    this.renderer.needsRedraw = true;
   }
+
+
 
   private applyWorldSnapshot(snapshot: WorldSnapshot): void {
     const deletedGroupIds: string[] = [];
@@ -528,18 +526,4 @@ export class App {
     }
   }
 
-  public destroy(): void {
-    console.log('🧹 Cleaning up previous App instance...');
-    
-    // Unsubscribe from world sync
-    this.unsubscribeWorldSync?.();
-    this.worldSync.unsubscribe();
-    
-    // Stop map renderer
-    this.renderer.stop();
-    
-    // Remove UI elements
-    this.lobbyPanel?.destroy?.();
-    this.syncStatusElement?.remove();
-  }
 }
