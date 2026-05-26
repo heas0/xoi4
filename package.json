@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist --no-history"
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
