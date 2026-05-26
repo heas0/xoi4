@@ -28,6 +28,8 @@ export class MapRenderer {
   private regionService: RegionService;
   private groupService: GroupService;
   
+
+  
   private hoveredRegion: Region | null = null;
   private hoveredCell: HexCell | null = null;
   private animationFrameId: number | null = null;
@@ -155,6 +157,11 @@ export class MapRenderer {
   }
 
   private renderIfNeeded(): void {
+    const cursorsMoved = this.updateRemoteCursors();
+    if (cursorsMoved) {
+      this.needsRedraw = true;
+    }
+
     // Check if viewport changed
     const v = this.viewport;
     if (v.offsetX !== this.lastViewState.offsetX ||
@@ -203,6 +210,9 @@ export class MapRenderer {
     
     // Draw Google Maps style labels (drawn in screen space for pixel perfect sharpness)
     this.renderStateLabels();
+
+    // Draw remote players' cursors in screen space
+    this.renderRemoteCursors();
   }
 
   private renderChunkGrid(): void {
@@ -778,5 +788,17 @@ export class MapRenderer {
 
     // 3. Запуск плавной кинематографичной анимации камеры
     this.animateCameraTo(centerX, centerZ, targetZoom, 700);
+  }
+
+  public setRemoteCursors(_players: { clientId: string; name: string; color: string; x: number; y: number }[]): void {
+    // Disabled
+  }
+
+  private updateRemoteCursors(): boolean {
+    return false;
+  }
+
+  private renderRemoteCursors(): void {
+    // Disabled
   }
 }

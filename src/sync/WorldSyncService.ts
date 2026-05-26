@@ -26,6 +26,7 @@ export interface WorldSubscriptionHandlers {
   onOwnershipChange: (ownership: SyncedRegionOwnership) => void;
   onStatusChange?: (status: string) => void;
   onError?: (error: Error) => void;
+  onPresenceChange?: (players: { clientId: string; name: string; color: string; x: number; y: number }[]) => void;
 }
 
 interface WorldGroupRow {
@@ -61,6 +62,8 @@ export class WorldSyncService {
   private readonly mapVersion: string;
   private channel?: RealtimeChannel;
 
+
+
   constructor(mapVersion: string) {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -70,13 +73,7 @@ export class WorldSyncService {
     this.clientId = this.getOrCreateClientId();
 
     if (supabaseUrl && supabaseAnonKey) {
-      this.client = createClient(supabaseUrl, supabaseAnonKey, {
-        realtime: {
-          params: {
-            eventsPerSecond: 20
-          }
-        }
-      });
+      this.client = createClient(supabaseUrl, supabaseAnonKey);
     }
   }
 
@@ -168,7 +165,38 @@ export class WorldSyncService {
 
     this.unsubscribe();
     this.channel = this.client
-      .channel(`world:${this.worldId}`)
+      .channel(`world:${this.worldId}`, {
+        config: {
+          presence: {
+            key: this.clientId
+          }
+        }
+      })
+      .on(
+        'presence',
+        { event: 'sync' },
+        () => {
+          if (handlers.onPresenceChange) {
+            const state = this.channel!.presenceState();
+            const players: { clientId: string; name: string; color: string; x: number; y: number }[] = [];
+            for (const key of Object.keys(state)) {
+              if (key === this.clientId) continue;
+              const presences = state[key] as any[];
+              if (presences && presences.length > 0) {
+                const p = presences[0];
+                players.push({
+                  clientId: key,
+                  name: p.name || 'Аноним',
+                  color: p.color || '#818cf8',
+                  x: Number(p.x) || 0,
+                  y: Number(p.y) || 0
+                });
+              }
+            }
+            handlers.onPresenceChange(players);
+          }
+        }
+      )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'world_groups', filter: `world_id=eq.${this.worldId}` },
@@ -191,6 +219,14 @@ export class WorldSyncService {
       )
       .subscribe(status => {
         handlers.onStatusChange?.(status);
+        if (status === 'SUBSCRIBED') {
+          const name = this.getOrCreateUserName();
+          const color = this.getOrCreateUserColor();
+          void this.channel!.track({
+            name,
+            color
+          });
+        }
       });
 
     return () => this.unsubscribe();
@@ -333,6 +369,67 @@ export class WorldSyncService {
       return created;
     } catch {
       return fallback();
+    }
+  }
+
+  public getOrCreateUserName(): string {
+    const storageKey = 'hexagonal_cells_username';
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      if (existing) return existing;
+    } catch {}
+
+    const titles = ['Император', 'Маршал', 'Генерал', 'Канцлер', 'Герцог', 'Барон', 'Президент', 'Консул', 'Сенатор', 'Вождь'];
+    const names = ['Альфа', 'Бета', 'Гамма', 'Дельта', 'Зета', 'Омега', 'Арес', 'Гелиос', 'Атлас', 'Орион'];
+    const randomTitle = titles[Math.floor(Math.random() * titles.length)];
+    const randomName = names[Math.floor(Math.random() * names.length)];
+    const num = Math.floor(Math.random() * 900) + 100;
+    const created = `${randomTitle} ${randomName} #${num}`;
+    
+    try {
+      window.localStorage.setItem(storageKey, created);
+    } catch {}
+    return created;
+  }
+
+  public getOrCreateUserColor(): string {
+    const storageKey = 'hexagonal_cells_usercolor';
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      if (existing) return existing;
+    } catch {}
+
+    const colors = [
+      '#818cf8', // Premium Indigo
+      '#f87171', // Soft Red
+      '#38bdf8', // Sky Blue
+      '#34d399', // Emerald
+      '#fb7185', // Rose
+      '#fbbf24', // Amber
+      '#a78bfa', // Lavender
+      '#2dd4bf', // Teal
+      '#f472b6'  // Pink
+    ];
+    const created = colors[Math.floor(Math.random() * colors.length)];
+    
+    try {
+      window.localStorage.setItem(storageKey, created);
+    } catch {}
+    return created;
+  }
+
+  updatePresence(_x: number, _y: number): void {
+    // Mouse tracking disabled
+  }
+
+  updateUsername(_newName: string): void {
+    if (this.client && this.channel) {
+      const name = this.getOrCreateUserName();
+      const color = this.getOrCreateUserColor();
+      void this.channel.track({
+        name,
+        color
+      });
     }
   }
 }

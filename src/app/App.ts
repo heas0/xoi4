@@ -5,6 +5,7 @@ import { ControlPanel } from '../ui/ControlPanel';
 import { ContextMenu } from '../ui/ContextMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { DebugPanel } from '../ui/DebugPanel';
+import { LobbyPanel } from '../ui/LobbyPanel';
 import { LayersPanel } from '../ui/LayersPanel';
 import { WorldSyncService } from '../sync';
 import type { SyncedGroup, SyncedRegionOwnership, WorldBaseline, WorldSnapshot } from '../sync';
@@ -29,10 +30,10 @@ interface CountryAssignmentsData {
     width: number;
     height: number;
     hexSize: number;
-      projection: string;
+    projection: string;
   };
-countries: GroupSeed[];
-assignments: CountryAssignmentRow[];
+  countries: GroupSeed[];
+  assignments: CountryAssignmentRow[];
 }
 
 const COUNTRY_ASSIGNMENTS = countryAssignmentsData as CountryAssignmentsData;
@@ -57,12 +58,14 @@ export class App {
   private contextMenu: ContextMenu;
   private tooltip: Tooltip;
   private controlPanel: ControlPanel;
+  private lobbyPanel!: LobbyPanel;
   private syncStatusElement: HTMLElement;
 
   // State
   private selectedGroupId: string = 'none';
   private worldSync: WorldSyncService;
   private unsubscribeWorldSync?: () => void;
+  private isWorldLive = false;
 
   constructor(config: AppConfig) {
     this.canvas = config.canvas;
@@ -138,12 +141,15 @@ export class App {
 
     this.tooltip = new Tooltip(this.groupService);
 
-    // Initialize Debug Panel
+    // Initialize Debug Panel (passive stats)
     new DebugPanel(
       this.hexGridService,
       this.regionService,
       this.mapImage
     );
+
+    // Initialize Lobby Panel (interactive presence, bottom-right)
+    this.lobbyPanel = new LobbyPanel(this.worldSync);
 
     // Initialize Layers Panel
     new LayersPanel(this.renderer);
@@ -161,7 +167,7 @@ export class App {
   private createSyncStatusElement(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'sync-status sync-status-disabled';
-    element.textContent = 'Локальный режим';
+    element.textContent = 'Мир не синхронизирован (Отключён)';
 
     const appRoot = document.getElementById('app');
     if (appRoot) {
@@ -222,21 +228,22 @@ export class App {
 
   private async initializeWorldSync(): Promise<void> {
     if (!this.worldSync.isEnabled) {
-      this.setSyncStatus('disabled', 'Локальный режим');
+      this.isWorldLive = false;
+      this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
       console.warn('Supabase sync is disabled. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable shared world state.');
       return;
     }
 
-    this.setSyncStatus('connecting', 'Синхронизация...');
+    this.setSyncStatus('connecting', 'Процесс синхронизации... (сохранение изменений)');
 
     try {
       const snapshot = await this.worldSync.loadWorld(this.createWorldBaseline());
       this.applyWorldSnapshot(snapshot);
       this.subscribeToWorldChanges();
-      this.setSyncStatus('synced', 'Мир синхронизирован');
     } catch (error) {
       console.error('Failed to initialize Supabase sync:', error);
-      this.setSyncStatus('error', 'Синхронизация недоступна');
+      this.isWorldLive = false;
+      this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
     }
   }
 
@@ -291,11 +298,20 @@ export class App {
     this.unsubscribeWorldSync = this.worldSync.subscribe({
       onGroupChange: group => this.applySyncedGroup(group),
       onOwnershipChange: ownership => this.applySyncedOwnership(ownership),
+      onPresenceChange: players => {
+        this.lobbyPanel.updatePlayers(players);
+        this.renderer.setRemoteCursors(players);
+      },
       onStatusChange: status => {
         if (status === 'SUBSCRIBED') {
-          this.setSyncStatus('synced', 'Мир синхронизирован');
+          this.isWorldLive = true;
+          this.setSyncStatus('synced', 'Мир синхронизирован (live)');
+          this.lobbyPanel.updatePlayers(this.lobbyPanel.players);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          this.setSyncStatus('error', 'Realtime недоступен');
+          this.isWorldLive = false;
+          console.warn(`Supabase Realtime status: ${status}. World sync is disconnected.`);
+          this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
+          this.lobbyPanel.setDisconnectedStatus();
         }
       }
     });
@@ -411,17 +427,21 @@ export class App {
   private syncMutation(operation: () => Promise<void>, rollback: () => void): void {
     if (!this.worldSync.isEnabled) return;
 
-    this.setSyncStatus('saving', 'Сохранение...');
+    this.setSyncStatus('saving', 'Процесс синхронизации... (сохранение изменений)');
 
     void operation()
       .then(() => {
-        this.setSyncStatus('synced', 'Мир синхронизирован');
+        if (this.isWorldLive) {
+          this.setSyncStatus('synced', 'Мир синхронизирован (live)');
+        } else {
+          this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
+        }
       })
       .catch(error => {
         console.error('Failed to persist world change:', error);
         rollback();
         this.renderer.needsRedraw = true;
-        this.setSyncStatus('error', 'Ошибка сохранения');
+        this.setSyncStatus('disabled', 'Мир не синхронизирован (Отключён)');
       });
   }
 
@@ -507,4 +527,5 @@ export class App {
       }
     }
   }
+
 }
