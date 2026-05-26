@@ -5,7 +5,7 @@ var Ns=Object.defineProperty;var Cs=(s,e,t)=>e in s?Ns(s,e,{enumerable:!0,config
         <span class="group-name">${n.name}</span>
         <button class="btn-remove" data-remove-group="${n.id}" title="Удалить государство">×</button>
       </div>
-    `).join(""),this.isEditMode?e.classList.add("disabled"):e.classList.remove("disabled"),this.attachGroupListeners(e)}scrollToGroup(e){if(this.isEditMode)return;this.selectedGroupId=e,this.config.onGroupSelect(e);const t=document.getElementById("searchGroupInput");this.searchQuery&&(this.groupManager.getAllGroups().filter(i=>i.name.toLowerCase().includes(this.searchQuery.toLowerCase())).some(i=>i.id===e)||(this.searchQuery="",t&&(t.value=""))),this.updateGroupList();const r=this.container.querySelector(`.group-item[data-group-id="${e}"]`);r&&(this.isOpen||this.toggle(),r.scrollIntoView({behavior:"smooth",block:"nearest"}),r.classList.add("highlight-flash"),setTimeout(()=>r.classList.remove("highlight-flash"),1e3))}render(){this.container.className=`side-panel${this.isOpen?"":" collapsed"}`,this.container.innerHTML=`
+    `).join(""),this.isEditMode?e.classList.add("disabled"):e.classList.remove("disabled"),this.attachGroupListeners(e)}scrollToGroup(e){if(this.isEditMode)return;this.selectedGroupId=e,this.config.onGroupSelect(e);const t=document.getElementById("searchGroupInput");this.searchQuery&&(this.groupManager.getAllGroups().filter(i=>i.name.toLowerCase().includes(this.searchQuery.toLowerCase())).some(i=>i.id===e)||(this.searchQuery="",t&&(t.value=""))),this.updateGroupList();const r=this.container.querySelector(`.group-item[data-group-id="${e}"]`);if(r){const n=window.innerWidth<=768;!this.isOpen&&!n&&this.toggle(),r.scrollIntoView({behavior:"smooth",block:"nearest"}),r.classList.add("highlight-flash"),setTimeout(()=>r.classList.remove("highlight-flash"),1e3)}}render(){this.container.className=`side-panel${this.isOpen?"":" collapsed"}`,this.container.innerHTML=`
       <button class="panel-toggle">
         <div class="morph-chevron">
           <span></span>
@@ -195,4 +195,4 @@ ${U}`}class T extends Error{constructor({message:e,code:t,cause:r,name:n}){var i
         <pre style="background: #2a2a2a; padding: 10px; border-radius: 4px;">${s}</pre>
       </div>
     `}}Yi();
-//# sourceMappingURL=index-cmVkIlOK.js.map
+//# sourceMappingURL=index-COPY-rps.js.map
