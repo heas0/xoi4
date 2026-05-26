@@ -129,11 +129,13 @@ export class ContextMenu {
               </div>
             ` : ''}
           </div>
-          <div class="context-menu-divider" style="margin: 4px 0;"></div>
-          <div class="context-menu-item context-menu-add" id="contextAddGroupBtn" style="padding: 6px 8px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 8px;">
-            <span class="context-menu-icon" style="font-size: 14px; color: var(--color-primary);">+</span>
-            <span class="context-menu-name">Добавить государство...</span>
-          </div>
+          ${this.regionInfo && this.regionInfo.groupId !== 'none' && this.config.onSetCapital ? `
+            <div class="context-menu-divider" style="margin: 4px 0;"></div>
+            <div class="context-menu-item context-menu-capital" id="contextSetCapitalBtn" style="padding: 6px 8px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
+              <span class="context-menu-icon" style="font-size: 12px;">⭐</span>
+              <span class="context-menu-name" style="font-size: 12px;">Сделать столицей</span>
+            </div>
+          ` : ''}
         </div>
 
         <!-- Vertical Divider -->
@@ -148,19 +150,12 @@ export class ContextMenu {
             <span style="font-size: 16px; cursor: pointer; color: var(--text-secondary); line-height: 1; padding: 2px;" id="contextCloseBtn">&times;</span>
           </div>
 
-          ${this.regionInfo && this.regionInfo.groupId !== 'none' && this.config.onSetCapital ? `
-            <div class="context-menu-item context-menu-capital" id="contextSetCapitalBtn" style="padding: 6px 8px; border-radius: 8px; font-size: 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color);">
-              <span class="context-menu-icon" style="font-size: 12px;">⭐</span>
-              <span class="context-menu-name" style="font-size: 12px;">Сделать столицей</span>
-            </div>
-          ` : ''}
-
           <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
             <span style="font-weight: 500; color: #ffffff; font-size: 11px; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
               📝 <span style="font-size: 11px; opacity: 0.9;">Заметка региона</span>
             </span>
             <textarea id="contextRegionNote" placeholder="Введите заметку для этого региона..." 
-                      style="width: 100%; height: 100%; min-height: 130px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: 8px; color: #ffffff; padding: 8px 10px; font-size: 12px; resize: none; outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.2s;"
+                      style="width: 100%; height: 100%; min-height: 160px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: 8px; color: #ffffff; padding: 8px 10px; font-size: 12px; resize: none; outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.2s;"
             >${this.regionInfo ? this.regionInfo.note || '' : ''}</textarea>
           </div>
         </div>
