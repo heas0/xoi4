@@ -13,7 +13,7 @@ export class ControlPanel {
   private readonly config: ControlPanelConfig;
 
   private selectedGroupId = 'none';
-  private isOpen = true;
+  private isOpen = window.innerWidth > 768;
   private searchQuery = '';
   private isEditMode = false;
 
@@ -61,7 +61,7 @@ export class ControlPanel {
     
     const toggleBtn = this.container.querySelector('.panel-toggle');
     if (toggleBtn) {
-      toggleBtn.innerHTML = this.isOpen ? '◀' : '▶';
+      // Иконка поворачивается через CSS класс .collapsed
     }
   }
 
@@ -139,9 +139,14 @@ export class ControlPanel {
 
   /** Рендер панели */
   private render(): void {
-    this.container.className = 'side-panel';
+    this.container.className = `side-panel${this.isOpen ? '' : ' collapsed'}`;
     this.container.innerHTML = `
-      <button class="panel-toggle">◀</button>
+      <button class="panel-toggle">
+        <div class="morph-chevron">
+          <span></span>
+          <span></span>
+        </div>
+      </button>
       <div class="panel-content">
         <div class="panel-header">
           <h2>Государства</h2>

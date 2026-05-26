@@ -29,15 +29,16 @@ export class ContextMenu {
     this.container.className = 'context-menu';
     this.container.style.display = 'none';
     this.container.style.padding = '0';
-    this.container.style.width = '480px';
     document.body.appendChild(this.container);
 
-    // Закрытие по клику вне меню
-    document.addEventListener('click', (e) => {
+    // Закрытие по клику/тачу вне меню
+    const closeHandler = (e: Event) => {
       if (this.isVisible && !this.container.contains(e.target as Node)) {
         this.hide();
       }
-    });
+    };
+    document.addEventListener('click', closeHandler);
+    document.addEventListener('touchstart', closeHandler, { passive: true });
 
     // Закрытие по Escape
     document.addEventListener('keydown', (e) => {
@@ -47,38 +48,50 @@ export class ContextMenu {
     });
   }
 
-  /** Показать меню у курсора мыши */
+  /** Показать меню у курсора мыши (на мобильном — bottom sheet) */
   show(x: number, y: number, regionInfo?: { id: string; groupId: string; groupName: string; note?: string }): void {
     this.regionInfo = regionInfo;
     this.modalSearchQuery = ''; // Сброс поиска
     this.render();
 
+    const isMobileView = window.innerWidth <= 768;
+
     this.container.style.display = 'block';
 
-    // Мгновенное позиционирование
-    this.container.style.left = `${x}px`;
-    this.container.style.top = `${y}px`;
+    if (isMobileView) {
+      // Bottom sheet mode — CSS handles positioning via .context-menu-mobile
+      this.container.classList.add('context-menu-mobile');
+      this.container.style.left = '';
+      this.container.style.top = '';
+    } else {
+      // Desktop floating menu — position at cursor
+      this.container.classList.remove('context-menu-mobile');
+      this.container.style.left = `${x}px`;
+      this.container.style.top = `${y}px`;
 
-    // Ограничиваем меню рамками экрана
-    const rect = this.container.getBoundingClientRect();
-    const margin = 8;
+      // Ограничиваем меню рамками экрана
+      const rect = this.container.getBoundingClientRect();
+      const margin = 8;
 
-    const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
-    const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
+      const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+      const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
 
-    const clampedLeft = this.clamp(x, margin, maxLeft);
-    const clampedTop = this.clamp(y, margin, maxTop);
+      const clampedLeft = this.clamp(x, margin, maxLeft);
+      const clampedTop = this.clamp(y, margin, maxTop);
 
-    this.container.style.left = `${Math.round(clampedLeft)}px`;
-    this.container.style.top = `${Math.round(clampedTop)}px`;
+      this.container.style.left = `${Math.round(clampedLeft)}px`;
+      this.container.style.top = `${Math.round(clampedTop)}px`;
+    }
 
     this.isVisible = true;
 
-    // Фокус на поиск при открытии
-    setTimeout(() => {
-      const searchInput = document.getElementById('modalSearchInput') as HTMLInputElement;
-      if (searchInput) searchInput.focus();
-    }, 100);
+    // Фокус на поиск при открытии (только на десктопе, на мобильном вызовет клавиатуру)
+    if (!isMobileView) {
+      setTimeout(() => {
+        const searchInput = document.getElementById('modalSearchInput') as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+      }, 100);
+    }
   }
 
   /** Скрыть меню */

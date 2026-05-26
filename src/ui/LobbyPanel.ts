@@ -10,6 +10,7 @@ type LobbyPlayer = {
 
 export class LobbyPanel {
   private container: HTMLDivElement;
+  private mobileIndicator: HTMLDivElement;
   private activePlayers: LobbyPlayer[] = [];
 
   constructor(private worldSync: WorldSyncService) {
@@ -47,6 +48,15 @@ export class LobbyPanel {
     `;
 
     document.body.appendChild(this.container);
+
+    // Mobile-only compact online indicator (bottom-right)
+    this.mobileIndicator = document.createElement('div');
+    this.mobileIndicator.className = 'mobile-online-indicator';
+    const mobileStatusClass = this.worldSync.isEnabled ? 'online' : 'offline';
+    const mobileStatusText = this.worldSync.isEnabled ? '1' : '—';
+    this.mobileIndicator.innerHTML = `<span class="mobile-online-dot ${mobileStatusClass}"></span><span class="mobile-online-text">${mobileStatusText}</span>`;
+    document.body.appendChild(this.mobileIndicator);
+
     this.setupEventListeners();
     this.updatePlayers([]);
   }
@@ -72,6 +82,20 @@ export class LobbyPanel {
 
       nameInput.addEventListener('blur', handleNameChange);
     }
+
+    // Tap-toggle for lobby dropdown (works on mobile where :hover doesn't)
+    const statusEl = this.container.querySelector('.lobby-status') as HTMLElement;
+    if (statusEl) {
+      statusEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        statusEl.classList.toggle('open');
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', () => {
+        statusEl.classList.remove('open');
+      });
+    }
   }
 
   get players(): LobbyPlayer[] {
@@ -87,6 +111,8 @@ export class LobbyPanel {
     if (this.worldSync.isEnabled) {
       onlineCountElement.textContent = `${totalCount} в сети`;
       onlineCountElement.className = 'lobby-online-status-pill online';
+      // Update mobile indicator
+      this.mobileIndicator.innerHTML = `<span class="mobile-online-dot online"></span><span class="mobile-online-text">${totalCount}</span>`;
     } else {
       this.setDisconnectedStatus();
     }
@@ -119,6 +145,8 @@ export class LobbyPanel {
     const onlineCountElement = this.container.querySelector('#lobby-online-count')!;
     onlineCountElement.textContent = 'Отключён';
     onlineCountElement.className = 'lobby-online-status-pill offline';
+    // Update mobile indicator
+    this.mobileIndicator.innerHTML = `<span class="mobile-online-dot offline"></span><span class="mobile-online-text">—</span>`;
   }
 
   private escapeHtml(value: string): string {

@@ -510,14 +510,34 @@ export class App {
     this.syncStatusElement.textContent = message;
   }
 
+  // Tracks whether the last input was touch (to avoid showing tooltip after touch)
+  private lastInputWasTouch = false;
+
+  // Touch tap/long-press state
+  private touchStartX = 0;
+  private touchStartY = 0;
+  private touchStartTime = 0;
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private touchMoved = false;
+
   private setupEventListeners(): void {
     this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+    this.canvas.addEventListener('mousedown', () => { this.lastInputWasTouch = false; });
     this.canvas.addEventListener('click', this.onClick.bind(this));
     this.canvas.addEventListener('contextmenu', this.onContextMenu.bind(this));
     window.addEventListener('resize', () => this.renderer.recenter());
+
+    // Touch events for tap and long press
+    this.canvas.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+    this.canvas.addEventListener('touchmove', this.onTouchMoveApp.bind(this), { passive: false });
+    this.canvas.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
+    this.canvas.addEventListener('touchcancel', this.onTouchCancel.bind(this), { passive: false });
   }
 
   private onMouseMove(e: MouseEvent): void {
+    // After a touch interaction, skip tooltip until real mouse movement resumes
+    if (this.lastInputWasTouch) return;
+
     const worldPos = this.renderer.viewportInstance.screenToWorld(e.clientX, e.clientY);
     const cell = this.hexGridService.getCellAtWorld(worldPos.x, worldPos.y);
     const region = cell ? this.regionService.getRegionByCell(cell.q, cell.r) : undefined;
@@ -569,24 +589,133 @@ export class App {
     if (cell) {
       const region = this.regionService.getRegionByCell(cell.q, cell.r);
       if (region) {
-        const currentRegionId = region.id;
-
-        // Update callback to target this region
-        (this.contextMenu as any).config.onSelectGroup = (groupId: string) => {
-          this.assignRegion(currentRegionId, groupId);
-        };
-
-        const group = this.groupService.getGroup(region.groupId);
-        const groupName = group ? group.name : '';
-
-        this.contextMenu.show(e.clientX, e.clientY, {
-          id: region.id,
-          groupId: region.groupId,
-          groupName,
-          note: region.note || ''
-        });
+        this.showContextMenuForRegion(e.clientX, e.clientY, region);
       }
     }
   }
 
+  // === Touch handling (tap / long-press) ===
+
+  private static readonly TAP_THRESHOLD = 10; // max px movement for a tap
+  private static readonly LONG_PRESS_MS = 500;
+
+  private onTouchStart(e: TouchEvent): void {
+    this.lastInputWasTouch = true;
+
+    if (e.touches.length !== 1) {
+      this.cancelLongPress();
+      return;
+    }
+
+    const touch = e.touches[0];
+    this.touchStartX = touch.clientX;
+    this.touchStartY = touch.clientY;
+    this.touchStartTime = Date.now();
+    this.touchMoved = false;
+
+    // Start long press timer
+    this.longPressTimer = setTimeout(() => {
+      if (!this.touchMoved) {
+        this.handleLongPress(this.touchStartX, this.touchStartY);
+      }
+    }, App.LONG_PRESS_MS);
+  }
+
+  private onTouchMoveApp(e: TouchEvent): void {
+    if (e.touches.length !== 1) {
+      this.cancelLongPress();
+      return;
+    }
+
+    const touch = e.touches[0];
+    const dx = touch.clientX - this.touchStartX;
+    const dy = touch.clientY - this.touchStartY;
+
+    if (Math.sqrt(dx * dx + dy * dy) > App.TAP_THRESHOLD) {
+      this.touchMoved = true;
+      this.cancelLongPress();
+    }
+  }
+
+  private onTouchEnd(e: TouchEvent): void {
+    this.cancelLongPress();
+
+    // Only process taps (no drag, single finger)
+    if (this.touchMoved || e.changedTouches.length === 0) return;
+
+    const elapsed = Date.now() - this.touchStartTime;
+    if (elapsed >= App.LONG_PRESS_MS) return; // Long press already handled
+
+    const touch = e.changedTouches[0];
+    this.handleTap(touch.clientX, touch.clientY);
+  }
+
+  private onTouchCancel(): void {
+    this.cancelLongPress();
+    this.touchMoved = false;
+  }
+
+  private cancelLongPress(): void {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  private handleTap(clientX: number, clientY: number): void {
+    if (this.contextMenu.visible) {
+      this.contextMenu.hide();
+      return;
+    }
+
+    const worldPos = this.renderer.viewportInstance.screenToWorld(clientX, clientY);
+    const cell = this.hexGridService.getCellAtWorld(worldPos.x, worldPos.y);
+
+    if (cell) {
+      const region = this.regionService.getRegionByCell(cell.q, cell.r);
+      if (region) {
+        if (this.controlPanel.isEditModeActive() && this.selectedGroupId !== 'none') {
+          this.assignRegion(region.id, this.selectedGroupId);
+        } else if (region.groupId && region.groupId !== 'none') {
+          this.controlPanel.scrollToGroup(region.groupId);
+        }
+      }
+    }
+  }
+
+  private handleLongPress(clientX: number, clientY: number): void {
+    const worldPos = this.renderer.viewportInstance.screenToWorld(clientX, clientY);
+    const cell = this.hexGridService.getCellAtWorld(worldPos.x, worldPos.y);
+
+    if (cell) {
+      const region = this.regionService.getRegionByCell(cell.q, cell.r);
+      if (region) {
+        // Vibration feedback if available
+        if (navigator.vibrate) navigator.vibrate(30);
+        this.showContextMenuForRegion(clientX, clientY, region);
+      }
+    }
+  }
+
+  /** Shared logic for showing context menu for a region (used by both mouse right-click and long press) */
+  private showContextMenuForRegion(clientX: number, clientY: number, region: { id: string; groupId: string; note?: string }): void {
+    const currentRegionId = region.id;
+
+    // Update callback to target this region
+    (this.contextMenu as any).config.onSelectGroup = (groupId: string) => {
+      this.assignRegion(currentRegionId, groupId);
+    };
+
+    const group = this.groupService.getGroup(region.groupId);
+    const groupName = group ? group.name : '';
+
+    this.contextMenu.show(clientX, clientY, {
+      id: region.id,
+      groupId: region.groupId,
+      groupName,
+      note: region.note || ''
+    });
+  }
+
 }
+

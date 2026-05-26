@@ -28,6 +28,15 @@ export class Viewport {
   private lastMouseX = 0;
   private lastMouseY = 0;
 
+  // Touch state
+  private isTouchDragging = false;
+  private lastTouchX = 0;
+  private lastTouchY = 0;
+  private isPinching = false;
+  private lastPinchDist = 0;
+  private lastPinchCenterX = 0;
+  private lastPinchCenterY = 0;
+
   constructor(config: ViewportConfig) {
     this.canvas = config.canvas;
     this.ctx = this.canvas.getContext('2d')!;
@@ -39,6 +48,7 @@ export class Viewport {
     this.maxZoom = config.maxZoom ?? 50;
     
     this.setupEventListeners();
+    this.setupTouchListeners();
   }
 
   get offsetX(): number { return this._offsetX; }
@@ -164,4 +174,99 @@ export class Viewport {
       maxY: bottomRight.y
     };
   }
+
+  // === Touch Event Handling ===
+
+  private setupTouchListeners(): void {
+    this.canvas.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+    this.canvas.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+    this.canvas.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
+    this.canvas.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false });
+  }
+
+  private onTouchStart(e: TouchEvent): void {
+    e.preventDefault();
+
+    if (e.touches.length === 1) {
+      // Single finger — start drag
+      this.isTouchDragging = true;
+      this.isPinching = false;
+      this.lastTouchX = e.touches[0].clientX;
+      this.lastTouchY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      // Two fingers — start pinch
+      this.isTouchDragging = false;
+      this.isPinching = true;
+      this.lastPinchDist = this.getTouchDistance(e.touches[0], e.touches[1]);
+      this.lastPinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      this.lastPinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    }
+  }
+
+  private onTouchMove(e: TouchEvent): void {
+    e.preventDefault();
+
+    if (e.touches.length === 1 && this.isTouchDragging) {
+      // Single finger drag — pan the map
+      const touch = e.touches[0];
+      const dx = touch.clientX - this.lastTouchX;
+      const dy = touch.clientY - this.lastTouchY;
+
+      this._offsetX += dx;
+      this._offsetY += dy;
+
+      this.lastTouchX = touch.clientX;
+      this.lastTouchY = touch.clientY;
+    } else if (e.touches.length === 2 && this.isPinching) {
+      // Two finger pinch — zoom
+      const dist = this.getTouchDistance(e.touches[0], e.touches[1]);
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+      // Pan based on center movement
+      const dcx = centerX - this.lastPinchCenterX;
+      const dcy = centerY - this.lastPinchCenterY;
+      this._offsetX += dcx;
+      this._offsetY += dcy;
+
+      // Zoom towards pinch center
+      const scale = dist / this.lastPinchDist;
+      const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this._zoom * scale));
+
+      const rect = this.canvas.getBoundingClientRect();
+      const pinchX = centerX - rect.left;
+      const pinchY = centerY - rect.top;
+
+      const worldX = (pinchX - this._offsetX) / this._zoom;
+      const worldY = (pinchY - this._offsetY) / this._zoom;
+
+      this._zoom = newZoom;
+      this._offsetX = pinchX - worldX * this._zoom;
+      this._offsetY = pinchY - worldY * this._zoom;
+
+      this.lastPinchDist = dist;
+      this.lastPinchCenterX = centerX;
+      this.lastPinchCenterY = centerY;
+    }
+  }
+
+  private onTouchEnd(e: TouchEvent): void {
+    if (e.touches.length === 0) {
+      this.isTouchDragging = false;
+      this.isPinching = false;
+    } else if (e.touches.length === 1) {
+      // Went from pinch back to single finger — reset drag origin
+      this.isPinching = false;
+      this.isTouchDragging = true;
+      this.lastTouchX = e.touches[0].clientX;
+      this.lastTouchY = e.touches[0].clientY;
+    }
+  }
+
+  private getTouchDistance(t1: Touch, t2: Touch): number {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
 }
+

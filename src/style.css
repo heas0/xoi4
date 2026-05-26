@@ -135,6 +135,15 @@ body {
   left: 320px;
 }
 
+/* Collapsed Panel (Points Right) */
+.side-panel.collapsed .panel-toggle .morph-chevron span:nth-child(1) {
+  transform: translate(2px, -4.5px) rotate(45deg);
+}
+
+.side-panel.collapsed .panel-toggle .morph-chevron span:nth-child(2) {
+  transform: translate(2px, 4.5px) rotate(-45deg);
+}
+
 .panel-toggle {
   position: absolute;
   top: 30px;
@@ -152,7 +161,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   z-index: 110;
 }
@@ -162,6 +171,33 @@ body {
   color: var(--color-primary-light);
   transform: scale(1.08);
   box-shadow: 0 4px 16px var(--color-primary-glow);
+}
+
+.morph-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+
+.morph-chevron span {
+  position: absolute;
+  width: 14px;
+  height: 2.5px;
+  background-color: currentColor;
+  border-radius: 2px;
+  transition: transform 0.45s cubic-bezier(0.68, -0.55, 0.26, 1.55);
+}
+
+/* Open Panel (Points Left) */
+.morph-chevron span:nth-child(1) {
+  transform: translate(-2px, -4.5px) rotate(-45deg);
+}
+
+.morph-chevron span:nth-child(2) {
+  transform: translate(-2px, 4.5px) rotate(45deg);
 }
 
 .panel-content {
@@ -1404,4 +1440,347 @@ body {
   color: var(--color-primary-light);
   font-weight: 500;
   border: 1px solid rgba(129, 140, 248, 0.25);
+}
+
+/* === Desktop context menu width (was removed from inline styles) === */
+.context-menu {
+  width: 480px;
+}
+
+/* === Lobby dropdown tap-toggle support (desktop keeps :hover too) === */
+.lobby-status.open .lobby-online-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* === Mobile online indicator: hidden on desktop === */
+.mobile-online-indicator {
+  display: none;
+}
+
+/* ====================================================================
+   MOBILE RESPONSIVE STYLES
+   All rules below are scoped to max-width: 768px.
+   Desktop behavior is completely unaffected.
+   ==================================================================== */
+
+@media (max-width: 768px) {
+
+  /* --- Canvas: prevent browser gestures --- */
+  #canvas {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* --- Side Panel: fullscreen drawer --- */
+  .side-panel {
+    width: 100vw;
+    z-index: 200;
+  }
+
+  .side-panel.collapsed {
+    transform: translateX(-100vw);
+  }
+
+  .side-panel.collapsed .panel-toggle {
+    left: 100vw;
+  }
+
+  .panel-toggle {
+    width: 48px;
+    height: 48px;
+    font-size: 16px;
+    top: 16px;
+    left: calc(100vw - 56px);
+  }
+
+  .panel-content {
+    padding: 20px 16px;
+    gap: 14px;
+  }
+
+  .panel-header h2 {
+    font-size: 20px;
+  }
+
+  /* Larger touch targets for group list items */
+  .group-item {
+    padding: 14px 16px;
+    min-height: 48px;
+  }
+
+  .btn-remove {
+    width: 36px;
+    height: 36px;
+    font-size: 22px;
+  }
+
+  .btn-add-circle {
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+  }
+
+  .input-group {
+    padding: 5px 6px 5px 16px;
+  }
+
+  .input-group input[type="text"] {
+    height: 40px;
+    font-size: 15px;
+  }
+
+  /* --- Debug Panel: hide on mobile --- */
+  .debug-panel {
+    display: none !important;
+  }
+
+  /* --- Layers Panel: centered horizontally --- */
+  .layers-panel {
+    top: auto;
+    right: auto;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 0;
+    width: max-content;
+    max-width: calc(100% - 32px);
+    padding: 8px 10px;
+    border-radius: 14px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    z-index: 800;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .layers-header {
+    display: none;
+  }
+
+  .layer-btn {
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 11px;
+    min-height: 36px;
+  }
+
+  /* --- Lobby Panel: hidden on mobile, replaced by compact indicator --- */
+  .lobby-panel {
+    display: none !important;
+  }
+
+  /* --- Mobile Online Indicator: small pill bottom-right --- */
+  .mobile-online-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    z-index: 900;
+    background: rgba(30, 41, 59, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-card);
+    border-radius: 20px;
+    padding: 6px 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .mobile-online-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .mobile-online-dot.online {
+    background: #34d399;
+    box-shadow: 0 0 6px #34d399;
+  }
+
+  .mobile-online-dot.offline {
+    background: #f87171;
+    box-shadow: 0 0 6px #f87171;
+  }
+
+  .mobile-online-text {
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    line-height: 1;
+  }
+
+  /* --- Hide display panel and online indicator when left side-panel is expanded --- */
+  body:has(.side-panel:not(.collapsed)) .layers-panel {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: translate(-50%, 15px) !important;
+  }
+
+  body:has(.side-panel:not(.collapsed)) .mobile-online-indicator {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: translateY(15px) !important;
+  }
+
+  /* --- Dashboard Panel: single column stack --- */
+  .dashboard-panel {
+    top: auto;
+    bottom: 8px;
+    right: 8px;
+    left: auto;
+    min-width: 0;
+    max-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    font-size: 12px;
+  }
+
+  .dashboard-grid-divider {
+    width: 100%;
+    height: 1px;
+  }
+
+  .dashboard-profile-header {
+    padding: 6px 10px;
+  }
+
+  #dashboard-profile-name {
+    font-size: 12px;
+  }
+
+  .dashboard-online-status-pill {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
+  /* --- Context Menu: bottom sheet on mobile --- */
+  .context-menu.context-menu-mobile {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 65vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    animation: bottomSheetSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes bottomSheetSlideUp {
+    0% {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Bottom sheet drag handle indicator */
+  .context-menu.context-menu-mobile::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    margin: 10px auto 4px;
+  }
+
+  /* Larger touch targets inside context menu */
+  .context-menu-grid-item {
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+
+  .context-menu-item {
+    padding: 12px 18px;
+    min-height: 44px;
+  }
+
+  .context-menu-grid-item .context-menu-name,
+  .context-menu-item .context-menu-name {
+    font-size: 14px;
+  }
+
+  /* --- Modal: responsive width --- */
+  .modal-box {
+    width: calc(100vw - 32px);
+    max-width: 480px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .modal-grid {
+    grid-template-columns: 1fr;
+    max-height: 220px;
+  }
+
+  .modal-grid-item {
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+
+  .modal-btn {
+    padding: 14px 18px;
+    min-height: 48px;
+    font-size: 14px;
+  }
+
+  /* --- Sync Status: compact on mobile --- */
+  .sync-status {
+    top: 10px;
+    font-size: 11px;
+    padding: 6px 12px;
+    max-width: calc(100vw - 80px);
+  }
+
+  /* --- Hex Tooltip: hide on mobile (no hover) --- */
+  .hex-tooltip {
+    display: none !important;
+  }
+
+  /* --- Toggle Switch: larger for touch --- */
+  .toggle-switch {
+    width: 50px;
+    height: 28px;
+  }
+
+  .toggle-slider:before {
+    height: 20px;
+    width: 20px;
+  }
+
+  .toggle-switch input:checked+.toggle-slider:before {
+    transform: translateX(22px);
+  }
+
+  /* --- Edit mode section: larger touch target --- */
+  .edit-mode-section {
+    padding: 14px 16px;
+    min-height: 48px;
+  }
 }
