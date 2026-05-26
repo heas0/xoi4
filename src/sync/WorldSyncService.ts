@@ -1,0 +1,338 @@
+import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
+import type { GroupSeed, RegionGroupAssignment } from '../core/services';
+
+export interface WorldSnapshot {
+  groups: SyncedGroup[];
+  ownership: SyncedRegionOwnership[];
+}
+
+export interface SyncedGroup extends GroupSeed {
+  deletedAt: string | null;
+}
+
+export interface SyncedRegionOwnership extends RegionGroupAssignment {
+  version: number;
+  updatedAt: string;
+  clientId: string | null;
+}
+
+export interface WorldBaseline {
+  groups: GroupSeed[];
+  ownership: RegionGroupAssignment[];
+}
+
+export interface WorldSubscriptionHandlers {
+  onGroupChange: (group: SyncedGroup) => void;
+  onOwnershipChange: (ownership: SyncedRegionOwnership) => void;
+  onStatusChange?: (status: string) => void;
+  onError?: (error: Error) => void;
+}
+
+interface WorldGroupRow {
+  world_id: string;
+  id: string;
+  name: string;
+  color: string;
+  capital_region_id: string | null;
+  deleted_at: string | null;
+  updated_at: string;
+}
+
+interface RegionOwnershipRow {
+  world_id: string;
+  region_id: string;
+  group_id: string;
+  version: number;
+  updated_at: string;
+  client_id: string | null;
+}
+
+interface WorldRow {
+  id: string;
+  schema_version: number;
+  map_version: string;
+}
+
+export class WorldSyncService {
+  public readonly worldId: string;
+  public readonly clientId: string;
+
+  private readonly client?: SupabaseClient;
+  private readonly mapVersion: string;
+  private channel?: RealtimeChannel;
+
+  constructor(mapVersion: string) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    this.worldId = import.meta.env.VITE_WORLD_ID || 'default';
+    this.mapVersion = mapVersion;
+    this.clientId = this.getOrCreateClientId();
+
+    if (supabaseUrl && supabaseAnonKey) {
+      this.client = createClient(supabaseUrl, supabaseAnonKey, {
+        realtime: {
+          params: {
+            eventsPerSecond: 20
+          }
+        }
+      });
+    }
+  }
+
+  get isEnabled(): boolean {
+    return Boolean(this.client);
+  }
+
+  async loadWorld(baseline: WorldBaseline): Promise<WorldSnapshot> {
+    this.assertEnabled();
+
+    await this.ensureWorld();
+    await this.seedGroups(baseline.groups);
+    const groups = await this.fetchGroups();
+    const deletedGroupIds = new Set(
+      groups
+        .filter(group => group.deletedAt)
+        .map(group => group.id)
+    );
+    const ownershipBaseline = baseline.ownership.map(assignment => ({
+      regionId: assignment.regionId,
+      groupId: deletedGroupIds.has(assignment.groupId) ? 'none' : assignment.groupId
+    }));
+    await this.seedOwnership(ownershipBaseline);
+
+    const ownership = await this.fetchOwnership();
+
+    return { groups, ownership };
+  }
+
+  async addGroup(group: GroupSeed): Promise<void> {
+    this.assertEnabled();
+    await this.ensureWorld();
+
+    const { error } = await this.client!
+      .from('world_groups')
+      .upsert({
+        world_id: this.worldId,
+        id: group.id,
+        name: group.name,
+        color: group.color,
+        capital_region_id: group.capitalRegionId ?? null,
+        deleted_at: null
+      }, {
+        onConflict: 'world_id,id'
+      });
+
+    if (error) throw error;
+  }
+
+  async assignRegion(regionId: string, groupId: string): Promise<void> {
+    this.assertEnabled();
+
+    const { error } = await this.client!.rpc('set_region_group', {
+      p_world_id: this.worldId,
+      p_region_id: regionId,
+      p_group_id: groupId,
+      p_client_id: this.clientId
+    });
+
+    if (error) throw error;
+  }
+
+  async removeGroup(groupId: string): Promise<void> {
+    this.assertEnabled();
+
+    const { error } = await this.client!.rpc('remove_group', {
+      p_world_id: this.worldId,
+      p_group_id: groupId,
+      p_client_id: this.clientId
+    });
+
+    if (error) throw error;
+  }
+
+  async setCapital(groupId: string, regionId: string): Promise<void> {
+    this.assertEnabled();
+
+    const { error } = await this.client!.rpc('set_group_capital', {
+      p_world_id: this.worldId,
+      p_group_id: groupId,
+      p_region_id: regionId
+    });
+
+    if (error) throw error;
+  }
+
+  subscribe(handlers: WorldSubscriptionHandlers): () => void {
+    if (!this.client) return () => undefined;
+
+    this.unsubscribe();
+    this.channel = this.client
+      .channel(`world:${this.worldId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'world_groups', filter: `world_id=eq.${this.worldId}` },
+        payload => {
+          const row = payload.new as WorldGroupRow;
+          if (row?.id) {
+            handlers.onGroupChange(this.toSyncedGroup(row));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'region_ownership', filter: `world_id=eq.${this.worldId}` },
+        payload => {
+          const row = payload.new as RegionOwnershipRow;
+          if (row?.region_id) {
+            handlers.onOwnershipChange(this.toSyncedOwnership(row));
+          }
+        }
+      )
+      .subscribe(status => {
+        handlers.onStatusChange?.(status);
+      });
+
+    return () => this.unsubscribe();
+  }
+
+  unsubscribe(): void {
+    if (this.channel && this.client) {
+      void this.client.removeChannel(this.channel);
+      this.channel = undefined;
+    }
+  }
+
+  private async ensureWorld(): Promise<void> {
+    const row: WorldRow = {
+      id: this.worldId,
+      schema_version: 1,
+      map_version: this.mapVersion
+    };
+
+    const { error } = await this.client!
+      .from('worlds')
+      .upsert(row, { onConflict: 'id' });
+
+    if (error) throw error;
+  }
+
+  private async seedGroups(groups: GroupSeed[]): Promise<void> {
+    const rows = groups.map(group => ({
+      world_id: this.worldId,
+      id: group.id,
+      name: group.name,
+      color: group.color,
+      capital_region_id: group.capitalRegionId ?? null,
+      deleted_at: null
+    }));
+
+    await this.insertInBatches('world_groups', rows, 'world_id,id');
+  }
+
+  private async seedOwnership(ownership: RegionGroupAssignment[]): Promise<void> {
+    const rows = ownership.map(assignment => ({
+      world_id: this.worldId,
+      region_id: assignment.regionId,
+      group_id: assignment.groupId,
+      version: 1,
+      client_id: this.clientId
+    }));
+
+    await this.insertInBatches('region_ownership', rows, 'world_id,region_id');
+  }
+
+  private async insertInBatches(
+    table: 'world_groups' | 'region_ownership',
+    rows: Record<string, unknown>[],
+    onConflict: string
+  ): Promise<void> {
+    const batchSize = 500;
+
+    for (let index = 0; index < rows.length; index += batchSize) {
+      const batch = rows.slice(index, index + batchSize);
+      const { error } = await this.client!
+        .from(table)
+        .upsert(batch, {
+          onConflict,
+          ignoreDuplicates: true
+        });
+
+      if (error) throw error;
+    }
+  }
+
+  private async fetchGroups(): Promise<SyncedGroup[]> {
+    const rows = await this.fetchAll<WorldGroupRow>('world_groups', 'world_id,id,name,color,capital_region_id,deleted_at,updated_at');
+    return rows.map(row => this.toSyncedGroup(row));
+  }
+
+  private async fetchOwnership(): Promise<SyncedRegionOwnership[]> {
+    const rows = await this.fetchAll<RegionOwnershipRow>('region_ownership', 'world_id,region_id,group_id,version,updated_at,client_id');
+    return rows.map(row => this.toSyncedOwnership(row));
+  }
+
+  private async fetchAll<Row>(table: 'world_groups' | 'region_ownership', columns: string): Promise<Row[]> {
+    const pageSize = 1000;
+    const rows: Row[] = [];
+
+    for (let from = 0; ; from += pageSize) {
+      const to = from + pageSize - 1;
+      const { data, error } = await this.client!
+        .from(table)
+        .select(columns)
+        .eq('world_id', this.worldId)
+        .range(from, to);
+
+      if (error) throw error;
+      const page = (data ?? []) as Row[];
+      rows.push(...page);
+
+      if (page.length < pageSize) break;
+    }
+
+    return rows;
+  }
+
+  private toSyncedGroup(row: WorldGroupRow): SyncedGroup {
+    return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      capitalRegionId: row.capital_region_id,
+      deletedAt: row.deleted_at
+    };
+  }
+
+  private toSyncedOwnership(row: RegionOwnershipRow): SyncedRegionOwnership {
+    return {
+      regionId: row.region_id,
+      groupId: row.group_id,
+      version: row.version,
+      updatedAt: row.updated_at,
+      clientId: row.client_id
+    };
+  }
+
+  private assertEnabled(): void {
+    if (!this.client) {
+      throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+    }
+  }
+
+  private getOrCreateClientId(): string {
+    const storageKey = 'hexagonal_cells_client_id';
+    const fallback = () => crypto.randomUUID();
+
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      if (existing) return existing;
+
+      const created = fallback();
+      window.localStorage.setItem(storageKey, created);
+      return created;
+    } catch {
+      return fallback();
+    }
+  }
+}
