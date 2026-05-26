@@ -43,6 +43,16 @@ async function loadImageData(url: string): Promise<ImageData> {
 // === 2. Основная функция инициализации ===
 
 async function bootstrap() {
+  // Clean up previous instance during Vite HMR (Hot Module Replacement)
+  if ((window as any).app) {
+    console.log('🧹 Cleaning up old App instance to prevent memory/connection leaks...');
+    try {
+      (window as any).app.destroy();
+    } catch (e) {
+      console.error('Failed to destroy old App instance:', e);
+    }
+  }
+
   try {
     console.log('🚀 Starting application initialization...');
 

@@ -528,4 +528,18 @@ export class App {
     }
   }
 
+  public destroy(): void {
+    console.log('🧹 Cleaning up previous App instance...');
+    
+    // Unsubscribe from world sync
+    this.unsubscribeWorldSync?.();
+    this.worldSync.unsubscribe();
+    
+    // Stop map renderer
+    this.renderer.stop();
+    
+    // Remove UI elements
+    this.lobbyPanel?.destroy?.();
+    this.syncStatusElement?.remove();
+  }
 }
