@@ -14,6 +14,7 @@ export interface SyncedRegionOwnership extends RegionGroupAssignment {
   version: number;
   updatedAt: string;
   clientId: string | null;
+  note?: string | null;
 }
 
 
@@ -39,6 +40,7 @@ interface RegionOwnershipRow {
   world_id: string;
   region_id: string;
   group_id: string;
+  note: string | null;
   version: number;
   updated_at: string;
   client_id: string | null;
@@ -114,6 +116,19 @@ export class WorldSyncService {
       p_world_id: this.worldId,
       p_region_id: regionId,
       p_group_id: groupId,
+      p_client_id: this.clientId
+    });
+
+    if (error) throw error;
+  }
+
+  async saveRegionNote(regionId: string, note: string): Promise<void> {
+    this.assertEnabled();
+
+    const { error } = await this.client!.rpc('set_region_note', {
+      p_world_id: this.worldId,
+      p_region_id: regionId,
+      p_note: note,
       p_client_id: this.clientId
     });
 
@@ -244,7 +259,7 @@ export class WorldSyncService {
   }
 
   private async fetchOwnership(): Promise<SyncedRegionOwnership[]> {
-    const rows = await this.fetchAll<RegionOwnershipRow>('region_ownership', 'world_id,region_id,group_id,version,updated_at,client_id');
+    const rows = await this.fetchAll<RegionOwnershipRow>('region_ownership', 'world_id,region_id,group_id,note,version,updated_at,client_id');
     return rows.map(row => this.toSyncedOwnership(row));
   }
 
@@ -286,7 +301,8 @@ export class WorldSyncService {
       groupId: row.group_id,
       version: row.version,
       updatedAt: row.updated_at,
-      clientId: row.client_id
+      clientId: row.client_id,
+      note: row.note
     };
   }
 

@@ -283,9 +283,10 @@ export class App {
   private updateRegionNote(regionId: string, note: string): void {
     const region = this.regionService.getRegion(regionId);
     if (region) {
+      const previousNote = region.note;
       region.note = note;
 
-      // Persist in localStorage
+      // Persist in localStorage as local fallback
       const storageKey = `hex_notes_${this.worldSync.worldId}`;
       try {
         const stored = localStorage.getItem(storageKey);
@@ -295,6 +296,15 @@ export class App {
       } catch (e) {
         console.error('Failed to save region note to localStorage:', e);
       }
+
+      // Sync to Supabase in online mode
+      this.syncMutation(
+        () => this.worldSync.saveRegionNote(regionId, note),
+        () => {
+          region.note = previousNote;
+          this.renderer.needsRedraw = true;
+        }
+      );
     }
   }
 
@@ -323,6 +333,14 @@ export class App {
       regionId: ownership.regionId,
       groupId: ownership.groupId
     })));
+
+    // Load notes from the server snapshot
+    for (const ownership of snapshot.ownership) {
+      const region = this.regionService.getRegion(ownership.regionId);
+      if (region && ownership.note !== undefined) {
+        region.note = ownership.note || '';
+      }
+    }
 
     for (const groupId of deletedGroupIds) {
       this.applyDeletedGroup(groupId);
@@ -372,6 +390,10 @@ export class App {
 
   private applySyncedOwnership(ownership: SyncedRegionOwnership): void {
     this.regionService.setRegionGroup(ownership.regionId, ownership.groupId);
+    const region = this.regionService.getRegion(ownership.regionId);
+    if (region && ownership.note !== undefined) {
+      region.note = ownership.note || '';
+    }
   }
 
   private applyDeletedGroup(groupId: string): void {

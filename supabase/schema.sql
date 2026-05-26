@@ -27,6 +27,7 @@ create table if not exists public.region_ownership (
   world_id text not null references public.worlds(id) on delete cascade,
   region_id text not null,
   group_id text not null default 'none',
+  note text,
   version integer not null default 1,
   updated_at timestamptz not null default now(),
   client_id text,
@@ -115,6 +116,64 @@ begin
   on conflict (world_id, region_id)
   do update set
     group_id = excluded.group_id,
+    version = current_row.version + 1,
+    client_id = excluded.client_id,
+    updated_at = now()
+  returning * into changed;
+
+  update public.worlds
+  set updated_at = now()
+  where id = p_world_id;
+
+  return changed;
+end;
+$$;
+
+create or replace function public.set_region_note(
+  p_world_id text,
+  p_region_id text,
+  p_note text,
+  p_client_id text default null
+)
+returns public.region_ownership
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  changed public.region_ownership;
+begin
+  if length(trim(coalesce(p_world_id, ''))) = 0 then
+    raise exception 'world id is required';
+  end if;
+
+  if length(trim(coalesce(p_region_id, ''))) = 0 then
+    raise exception 'region id is required';
+  end if;
+
+  insert into public.worlds (id, schema_version, map_version)
+  values (p_world_id, 1, 'unknown')
+  on conflict (id) do nothing;
+
+  insert into public.region_ownership as current_row (
+    world_id,
+    region_id,
+    group_id,
+    note,
+    version,
+    client_id
+  )
+  values (
+    p_world_id,
+    p_region_id,
+    'none',
+    p_note,
+    1,
+    p_client_id
+  )
+  on conflict (world_id, region_id)
+  do update set
+    note = excluded.note,
     version = current_row.version + 1,
     client_id = excluded.client_id,
     updated_at = now()
@@ -303,6 +362,7 @@ grant select, insert, update on public.region_ownership to anon, authenticated;
 grant execute on function public.set_region_group(text, text, text, text) to anon, authenticated;
 grant execute on function public.remove_group(text, text, text) to anon, authenticated;
 grant execute on function public.set_group_capital(text, text, text) to anon, authenticated;
+grant execute on function public.set_region_note(text, text, text, text) to anon, authenticated;
 
 alter table public.world_groups replica identity full;
 alter table public.region_ownership replica identity full;
