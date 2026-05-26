@@ -519,6 +519,7 @@ export class App {
   private touchStartTime = 0;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private touchMoved = false;
+  private lastGestureTime = 0;
 
   private setupEventListeners(): void {
     this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
@@ -556,6 +557,10 @@ export class App {
   }
 
   private onClick(e: MouseEvent): void {
+    if (Date.now() - this.lastGestureTime < 300) {
+      return;
+    }
+
     if (this.contextMenu.visible) {
       this.contextMenu.hide();
       return;
@@ -583,6 +588,10 @@ export class App {
   private onContextMenu(e: MouseEvent): void {
     e.preventDefault();
 
+    if (Date.now() - this.lastGestureTime < 300) {
+      return;
+    }
+
     const worldPos = this.renderer.viewportInstance.screenToWorld(e.clientX, e.clientY);
     const cell = this.hexGridService.getCellAtWorld(worldPos.x, worldPos.y);
 
@@ -603,7 +612,9 @@ export class App {
     this.lastInputWasTouch = true;
 
     if (e.touches.length !== 1) {
+      this.touchMoved = true;
       this.cancelLongPress();
+      this.lastGestureTime = Date.now();
       return;
     }
 
@@ -623,7 +634,9 @@ export class App {
 
   private onTouchMoveApp(e: TouchEvent): void {
     if (e.touches.length !== 1) {
+      this.touchMoved = true;
       this.cancelLongPress();
+      this.lastGestureTime = Date.now();
       return;
     }
 
@@ -634,6 +647,7 @@ export class App {
     if (Math.sqrt(dx * dx + dy * dy) > App.TAP_THRESHOLD) {
       this.touchMoved = true;
       this.cancelLongPress();
+      this.lastGestureTime = Date.now();
     }
   }
 
@@ -648,6 +662,7 @@ export class App {
 
     const touch = e.changedTouches[0];
     this.handleTap(touch.clientX, touch.clientY);
+    e.preventDefault();
   }
 
   private onTouchCancel(): void {

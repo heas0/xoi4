@@ -36,6 +36,7 @@ export class Viewport {
   private lastPinchDist = 0;
   private lastPinchCenterX = 0;
   private lastPinchCenterY = 0;
+  private wasPinchingInGesture = false;
 
   constructor(config: ViewportConfig) {
     this.canvas = config.canvas;
@@ -197,6 +198,7 @@ export class Viewport {
       // Two fingers — start pinch
       this.isTouchDragging = false;
       this.isPinching = true;
+      this.wasPinchingInGesture = true;
       this.lastPinchDist = this.getTouchDistance(e.touches[0], e.touches[1]);
       this.lastPinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       this.lastPinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
@@ -206,7 +208,7 @@ export class Viewport {
   private onTouchMove(e: TouchEvent): void {
     e.preventDefault();
 
-    if (e.touches.length === 1 && this.isTouchDragging) {
+    if (e.touches.length === 1 && this.isTouchDragging && !this.wasPinchingInGesture) {
       // Single finger drag — pan the map
       const touch = e.touches[0];
       const dx = touch.clientX - this.lastTouchX;
@@ -254,6 +256,7 @@ export class Viewport {
     if (e.touches.length === 0) {
       this.isTouchDragging = false;
       this.isPinching = false;
+      this.wasPinchingInGesture = false;
     } else if (e.touches.length === 1) {
       // Went from pinch back to single finger — reset drag origin
       this.isPinching = false;

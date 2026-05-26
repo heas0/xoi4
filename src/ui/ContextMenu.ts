@@ -116,11 +116,32 @@ export class ContextMenu {
     );
 
     const formattedRegionName = this.regionInfo ? `#${this.regionInfo.id.replace('region_', '')}` : '';
+    const isMobile = window.innerWidth <= 768;
+
+    const containerStyle = isMobile 
+      ? 'display: flex; flex-direction: column; gap: 14px; padding: 14px 18px; min-width: 100%; box-sizing: border-box;'
+      : 'display: flex; gap: 16px; padding: 14px 18px; min-width: 450px; box-sizing: border-box;';
+
+    const leftColStyle = isMobile
+      ? 'flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 100%;'
+      : 'flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 200px;';
+
+    const dividerStyle = isMobile
+      ? 'height: 1px; background: var(--border-color); width: 100%; margin: 2px 0;'
+      : 'width: 1px; background: var(--border-color); align-self: stretch;';
+
+    const rightColStyle = isMobile
+      ? 'flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 100%;'
+      : 'flex: 1.1; display: flex; flex-direction: column; gap: 8px; min-width: 220px;';
+
+    const textareaStyle = isMobile
+      ? 'width: 100%; height: 110px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: 8px; color: #ffffff; padding: 8px 10px; font-size: 12px; resize: none; outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.2s;'
+      : 'width: 100%; height: 100%; min-height: 160px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: 8px; color: #ffffff; padding: 8px 10px; font-size: 12px; resize: none; outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.2s;';
 
     this.container.innerHTML = `
-      <div style="display: flex; gap: 16px; padding: 14px 18px; min-width: 450px; box-sizing: border-box;">
+      <div style="${containerStyle}">
         <!-- Left Column: Owner & Nations -->
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 200px;">
+        <div style="${leftColStyle}">
           <div style="font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px;">
             Владелец
           </div>
@@ -151,11 +172,11 @@ export class ContextMenu {
           ` : ''}
         </div>
 
-        <!-- Vertical Divider -->
-        <div style="width: 1px; background: var(--border-color); align-self: stretch;"></div>
+        <!-- Divider -->
+        <div style="${dividerStyle}"></div>
 
         <!-- Right Column: Region Details & Notes -->
-        <div style="flex: 1.1; display: flex; flex-direction: column; gap: 8px; min-width: 220px;">
+        <div style="${rightColStyle}">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; flex-shrink: 0;">
             <span style="font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px;">
               Регион ${formattedRegionName}
@@ -168,7 +189,7 @@ export class ContextMenu {
               📝 <span style="font-size: 11px; opacity: 0.9;">Заметка региона</span>
             </span>
             <textarea id="contextRegionNote" placeholder="Введите заметку для этого региона..." 
-                      style="width: 100%; height: 100%; min-height: 160px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color); border-radius: 8px; color: #ffffff; padding: 8px 10px; font-size: 12px; resize: none; outline: none; font-family: inherit; box-sizing: border-box; transition: border-color 0.2s;"
+                      style="${textareaStyle}"
             >${this.regionInfo ? this.regionInfo.note || '' : ''}</textarea>
           </div>
         </div>
